@@ -84,9 +84,76 @@ export const TIER_COLORS = [
 ];
 
 /** A sprite of `tier` with radius `r` in screen pixels. Its canvas is 2.2r wide (rings stick out). */
+// ----- Illustrated pieces (public/art/items/<theme>/NN.webp), drawn for this game with Higgsfield -----
+
+const images = new Map<string, HTMLImageElement>();
+const loaded = new Set<string>();
+const listeners = new Set<() => void>();
+
+function imgKey(theme: Theme, tier: number) {
+  // The Comet is shared by every theme.
+  return tier < 0 ? 'space/11' : `${theme}/${String(tier).padStart(2, '0')}`;
+}
+
+/** Starts loading a theme's pieces; `done` runs when all of them are ready. */
+export function preloadTheme(theme: Theme, done?: () => void) {
+  const keys = [...Array(11).keys()].map(t => imgKey(theme, t)).concat(imgKey(theme, -1));
+  let left = keys.filter(k => !loaded.has(k)).length;
+  if (!left) { done?.(); return; }
+  for (const k of keys) {
+    if (images.has(k)) continue;
+    const im = new Image();
+    im.decoding = 'async';
+    im.onload = () => {
+      loaded.add(k);
+      for (const f of listeners) f();
+      if (--left === 0) done?.();
+    };
+    im.onerror = () => { if (--left === 0) done?.(); };
+    im.src = `art/items/${k}.webp`;
+    images.set(k, im);
+  }
+}
+
+// ----- Backgrounds and the mascot (public/art/bg, public/art/mascot) -----
+
+export type Pose = 'wave' | 'cheer' | 'think' | 'worried';
+export const mascotUrl = (pose: Pose) => `art/mascot/${pose}.webp`;
+export const bgUrl = (theme: Theme) => `art/bg/${theme}.webp`;
+
+const bgs = new Map<Theme, HTMLImageElement>();
+/** The theme's background picture once it has loaded (null before; `onload` then runs when ready). */
+export function themeBg(theme: Theme, onload?: () => void): HTMLImageElement | null {
+  let im = bgs.get(theme);
+  if (!im) {
+    im = new Image();
+    im.src = bgUrl(theme);
+    bgs.set(theme, im);
+  }
+  if (im.complete && im.naturalWidth) return im;
+  if (onload) im.addEventListener('load', onload, { once: true });
+  return null;
+}
+
+export function onArtLoaded(f: () => void) {
+  listeners.add(f);
+  return () => listeners.delete(f);
+}
+
+/** True when the piece has illustrated art (then no code-drawn face is added). */
+export function hasArt(tier: number, theme: Theme) {
+  return loaded.has(imgKey(theme, tier));
+}
+
+// How wide the art is drawn compared with the physics circle (rings and sun rays stick out).
+function artScale(tier: number) {
+  return tier === 8 ? 2.5 : tier === 10 ? 2.36 : tier < 0 ? 2.25 : 2.1;
+}
+
 export function sprite(tier: number, r: number, theme: Theme = 'space'): HTMLCanvasElement {
   const px = Math.max(4, Math.round(r));
-  const key = `${theme}:${tier}:${px}`;
+  const art = hasArt(tier, theme);
+  const key = `${theme}:${tier}:${px}:${art ? 1 : 0}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const size = Math.ceil(px * 2.6);
@@ -94,7 +161,12 @@ export function sprite(tier: number, r: number, theme: Theme = 'space'): HTMLCan
   c.width = c.height = size;
   const g = c.getContext('2d')!;
   g.translate(size / 2, size / 2);
-  if (theme === 'space' || tier < 0) draw(g, tier, px);
+  if (art) {
+    const im = images.get(imgKey(theme, tier))!;
+    const w = px * artScale(tier);
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(im, -w / 2, -w / 2, w, w);
+  } else if (theme === 'space' || tier < 0) draw(g, tier, px);
   else if (theme === 'gems') drawGem(g, tier, px);
   else drawEmoji(g, tier, px, theme);
   cache.set(key, c);

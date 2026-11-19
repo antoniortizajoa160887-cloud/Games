@@ -28,6 +28,7 @@ export interface Profile {
   weekly: { key: string; progress: Record<string, number>; claimed: string[] };
   totals: { runs: number; merges: number; supernovas: number };
   settings: Settings;
+  seenGuide: boolean;
 }
 
 const KEY = 'stellar-drop-save-v1';
@@ -49,6 +50,7 @@ function fresh(): Profile {
     weekly: { key: '', progress: {}, claimed: [] },
     totals: { runs: 0, merges: 0, supernovas: 0 },
     settings: { music: 0.6, sfx: 0.8, vibration: true, faces: true, theme: 'space' },
+    seenGuide: false,
   };
 }
 

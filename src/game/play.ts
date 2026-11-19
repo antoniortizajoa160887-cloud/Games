@@ -7,7 +7,7 @@ import { COMET, COMET_EVERY, DROP_WEIGHTS, STAR } from '../core/tiers';
 import { buzz } from '../platform';
 import { profile, save, track, type PowerUp } from '../save';
 import { h } from '../ui/dom';
-import { drawFace, FINALE_NAME, sprite, THEME_NAMES, TIER_COLORS, tierRadius, type Theme } from './art';
+import { drawFace, FINALE_NAME, hasArt, mascotUrl, sprite, THEME_NAMES, themeBg, TIER_COLORS, tierRadius, type Pose, type Theme } from './art';
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
 
@@ -112,6 +112,8 @@ export class PlaySession {
   private elapsedPaused = 0;
   private pauseStart = 0;
   private danger = 0;
+  private cheerUntil = 0;
+  private pose: Pose = 'wave';
   private lastWarn = 0;
 
   private particles: Particle[] = [];
@@ -304,6 +306,7 @@ export class PlaySession {
       if (res.firstTime) this.popup(this.W / 2, 140, `New: ${this.names[nt]}!`, TIER_COLORS[nt], 26);
       if (nt >= 6) { this.shake = Math.min(14, 4 + nt); buzz(true); } else buzz(false);
       sfx.merge(nt, res.chain);
+      if (nt >= 6 || res.chain >= 3 || res.firstTime) this.cheer(1600);
       this.pulseCharge++;
       if (this.pulseCharge >= 10) {
         this.pulseCharge = 0;
@@ -321,6 +324,7 @@ export class PlaySession {
     this.shake = 22;
     buzz(true);
     sfx.supernova();
+    this.cheer(2600);
     this.rings.push({ x, y, r: 10, max: 900, life: 0, color: '#fff7c0' });
     this.burst(x, y, '#fff2a0', 80, 3);
     this.popup(this.W / 2, 200, `${FINALE_NAME[this.theme]}! +500`, '#fff2a0', 34);
@@ -519,6 +523,7 @@ export class PlaySession {
       sfx.warn();
     }
     if (this.danger > OVER_LIMIT_MS) this.overflow();
+    this.setPose(now < this.cheerUntil ? 'cheer' : this.danger > 0 ? 'worried' : 'wave');
     if (this.mode.timeLimit && this.timeLeft() <= 0) this.finish('time');
     if (this.mode.drops !== undefined && this.dropsUsed >= this.mode.drops && now - this.lastDropAt > 2500) this.finish('drops', false);
   }
@@ -606,6 +611,22 @@ export class PlaySession {
     this.onQuit();
   }
 
+  // ----- Mascot -----
+
+  private cheer(ms: number) {
+    this.cheerUntil = Math.max(this.cheerUntil, this.now() + ms);
+  }
+
+  private setPose(p: Pose) {
+    if (p === this.pose) return;
+    this.pose = p;
+    const m = this.hud.mascot as HTMLImageElement;
+    m.src = mascotUrl(p);
+    m.classList.remove('hop');
+    void m.offsetWidth;
+    m.classList.add('hop');
+  }
+
   // ----- HUD -----
 
   private buildHud(): HTMLElement {
@@ -624,8 +645,8 @@ export class PlaySession {
       m.powerUps ? power('swap', '🔄', 'Swap') : h('span.spacer'),
       m.noPulse ? h('span.spacer') : this.hud.pulse,
       m.powerUps ? power('boost', '⏫', 'Boost') : h('span.spacer'),
-      h('span.spacer'),
     );
+    this.hud.mascot = h('img.hud-mascot', { src: mascotUrl('wave'), alt: '' });
     this.hud.hint = h('div.target-hint', {}, '');
     return h('div.hud', {},
       h('div.hud-top', {},
@@ -636,6 +657,7 @@ export class PlaySession {
       this.hud.goal,
       this.hud.hint,
       bottom,
+      this.hud.mascot,
     );
   }
 
@@ -705,6 +727,19 @@ export class PlaySession {
     lin.addColorStop(1, '#120c2c');
     bg.fillStyle = lin;
     bg.fillRect(0, 0, cw, ch);
+    const pic = themeBg(this.theme, () => { if (!this.ended) this.resize(); });
+    if (pic) {
+      // Cover-fit the theme picture, then dim it so the pieces stay easy to see.
+      const k = Math.max(cw / pic.naturalWidth, ch / pic.naturalHeight);
+      const pw = pic.naturalWidth * k, ph = pic.naturalHeight * k;
+      bg.drawImage(pic, (cw - pw) / 2, (ch - ph) / 2, pw, ph);
+      const dim = bg.createLinearGradient(0, 0, 0, ch);
+      dim.addColorStop(0, 'rgba(14,8,40,0.45)');
+      dim.addColorStop(0.5, 'rgba(14,8,40,0.62)');
+      dim.addColorStop(1, 'rgba(14,8,40,0.75)');
+      bg.fillStyle = dim;
+      bg.fillRect(0, 0, cw, ch);
+    }
     for (const [x, y, rad, col] of [[0.8, 0.2, 0.7, '160,80,220,0.25'], [0.1, 0.85, 0.6, '60,120,220,0.18']] as const) {
       const nb = bg.createRadialGradient(cw * x, ch * y, 0, cw * x, ch * y, cw * rad);
       nb.addColorStop(0, `rgba(${col})`);
@@ -782,13 +817,12 @@ export class PlaySession {
     }
 
     // bodies
-    const faces = profile.settings.faces;
     for (const b of this.bodies) {
       const sd = b.plugin.sd!;
       const age = now - sd.born;
       const sc = age < 260 ? 0.55 + 0.45 * easeOutBack(age / 260) : 1;
       let excited = false;
-      if (faces && sd.tier >= 0) {
+      if (sd.tier >= 0) {
         const rr = tierRadius(sd.tier);
         excited = this.bodies.some(o => o !== b && o.plugin.sd!.tier === sd.tier && Math.hypot(o.position.x - b.position.x, o.position.y - b.position.y) < rr * 2 + 24);
       }
@@ -876,6 +910,9 @@ export class PlaySession {
 
   private drawBody(tier: number, x: number, y: number, angle: number, sc: number, now: number, excited: boolean, seed: number) {
     const g = this.g;
+    const art = hasArt(tier, this.theme);
+    // Pieces wiggle when a twin is close, so a possible merge is easy to spot.
+    if (excited && art) sc *= 1 + 0.05 * Math.sin(now / 70 + seed);
     const r = tierRadius(tier) * sc;
     const s = sprite(tier, r * this.scale * this.dpr, this.theme);
     const w = s.width / this.scale / this.dpr;
@@ -884,7 +921,7 @@ export class PlaySession {
     g.rotate(angle);
     g.drawImage(s, -w / 2, -w / 2, w, w);
     g.restore();
-    if (profile.settings.faces && tier >= 0 && this.theme !== 'sea') drawFace(g, x, y, tier === 8 && this.theme === 'space' ? r * 0.86 : r, tier, now, excited, seed);
+    if (!art && profile.settings.faces && tier >= 0 && this.theme !== 'sea') drawFace(g, x, y, tier === 8 && this.theme === 'space' ? r * 0.86 : r, tier, now, excited, seed);
   }
 
   private drawStarGlow(x: number, y: number, now: number) {

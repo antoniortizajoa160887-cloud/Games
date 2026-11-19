@@ -2,7 +2,7 @@ import { applyVolumes, playMusic, sfx, unlockAudio } from '../audio';
 import { dailyChallenge, goalText, LEVELS, twistText, type LevelDef } from '../core/levels';
 import { hashSeed, todayKey } from '../core/rng';
 import { TIERS } from '../core/tiers';
-import { FINALE_NAME, sprite, THEME_LABEL, THEME_NAMES, type Theme } from '../game/art';
+import { bgUrl, FINALE_NAME, hasArt, mascotUrl, preloadTheme, sprite, THEME_LABEL, THEME_NAMES, type Pose, type Theme } from '../game/art';
 import { CatcherSession } from '../game/catcher';
 import { levelMode, PlaySession, SKINS, type ModeConfig, type RunResult } from '../game/play';
 import { currentMissions, missionsReady, profile, refreshPeriods, resetProgress, save, totalStars, track, type DomeSkin, type PowerUp } from '../save';
@@ -22,6 +22,7 @@ function show(el: HTMLElement, back: (() => void) | null, session: Active | null
   backTo = back;
   const root = app();
   clear(root);
+  root.style.backgroundImage = `url(${bgUrl(profile.settings.theme)})`;
   root.append(el);
   el.classList.add('enter');
 }
@@ -65,36 +66,142 @@ const names = () => THEME_NAMES[profile.settings.theme];
 
 // ----- Home -----
 
+const RANKS = ['Stargazer', 'Comet Chaser', 'Moon Walker', 'Planet Keeper', 'Star Captain', 'Nebula Hero', 'Galaxy Master'];
+
+/** Player level from everything done so far: stars, discoveries and games played. */
+function rank() {
+  const xp = totalStars() * 10 + profile.atlas.filter(Boolean).length * 25 + profile.totals.runs * 4 + Math.floor(profile.totals.merges / 10);
+  const lvl = Math.floor(Math.sqrt(xp / 15)) + 1;
+  const from = (lvl - 1) ** 2 * 15, to = lvl ** 2 * 15;
+  return { lvl, title: RANKS[Math.min(RANKS.length - 1, Math.floor((lvl - 1) / 3))], pct: Math.round(((xp - from) / (to - from)) * 100) };
+}
+
+const TIPS = [
+  'Two of the same piece merge into a bigger one!',
+  'Merge quickly one after another for a chain bonus.',
+  'Every 10 merges charge the Gravity Pulse. Tap ✦ to shake things down.',
+  'Keep pieces below the dashed line, or the dome overflows.',
+  'Catch a comet: it merges with anything it touches.',
+  'Big pieces in the corners leave room in the middle.',
+  'Come back every day for a new Daily Challenge.',
+];
+let tipIndex = Math.floor(Math.random() * TIPS.length);
+
+function mascot(pose: Pose, cls = ''): HTMLElement {
+  return h('img.mascot' + (cls ? '.' + cls : ''), { src: mascotUrl(pose), alt: 'Luma' });
+}
+
+/** Bottom tab bar shared by the main screens. */
+function tabBar(active: string): HTMLElement {
+  const ready = missionsReady();
+  const tab = (id: string, icon: string, label: string, go: () => void, badge = 0) =>
+    h('button.tab' + (id === active ? '.on' : ''), { onclick: () => { if (id === active) return; unlockAudio(); sfx.click(); go(); } },
+      h('span.tab-icon', {}, icon), h('span.tab-label', {}, label), badge ? h('span.badge', {}, String(badge)) : null);
+  return h('nav.tabbar', {},
+    tab('home', '🏠', 'Home', home),
+    tab('levels', '🪐', 'Levels', levels),
+    tab('daily', '🏆', 'Daily', challenges, ready),
+    tab('atlas', '📖', 'Atlas', atlas),
+    tab('shop', '🛍', 'Shop', shop));
+}
+
+function nextLevel(): LevelDef {
+  const i = LEVELS.findIndex((_, k) => !(profile.levelStars[k] > 0));
+  return LEVELS[i < 0 ? LEVELS.length - 1 : i];
+}
+
 export function home() {
   refreshPeriods();
   playMusic('home');
-  const ready = missionsReady();
-  const orbit = h('div.orbit', {});
-  [0, 2, 4, 6, 8, 10].forEach((t, i) => {
-    const s = spriteImg(t, 10 + t * 1.6, 'orbiter');
-    s.style.setProperty('--i', String(i));
-    orbit.append(s);
-  });
-  const tile = (icon: string, label: string, sub: string, onclick: () => void, badge = 0) =>
-    h('button.tile', { onclick: () => { unlockAudio(); sfx.click(); onclick(); } },
-      h('span.tile-icon', {}, icon), h('span.tile-label', {}, label), h('span.tile-sub', {}, sub),
-      badge ? h('span.badge', {}, String(badge)) : null);
-  const el = h('div.screen.home', {},
-    h('div.home-top', {}, coinChip(), h('button.icon-btn', { onclick: () => { sfx.click(); settings(); }, 'aria-label': 'Settings' }, '⚙')),
-    h('div.logo', {}, h('div.logo-main', {}, 'Stellar Drop'), h('div.logo-sub', {}, `${THEME_LABEL[profile.settings.theme]} merge puzzle`)),
-    orbit,
-    h('div.best', {}, `Best ${profile.bestClassic.toLocaleString('en-US')}`),
-    h('button.play-btn', { onclick: () => { unlockAudio(); sfx.click(); startRun(classicMode()); } }, '▶ Play'),
-    h('div.tiles', {},
-      tile('🪐', 'Levels', `${totalStars()} / ${LEVELS.length * 3} ★`, levels),
-      tile('🎮', 'Minigames', '4 games', minigames),
-      tile('🏆', 'Challenges', 'Daily + weekly', challenges, ready),
-      tile('📖', 'Atlas', 'Collection', atlas),
-      tile('🛍', 'Shop', 'Skins + power-ups', shop),
-      tile('🎨', 'Theme', THEME_LABEL[profile.settings.theme], themePicker),
-    ),
+  preloadTheme(profile.settings.theme);
+  const r = rank();
+  const { daily } = currentMissions();
+  const missionsDone = daily.filter(m => (profile.missions.progress[m.id] ?? 0) >= m.target).length;
+  const biggest = profile.atlas.slice(0, 11).lastIndexOf(true);
+  const bubble = h('div.bubble', {}, TIPS[tipIndex]);
+  const luma = mascot('wave', 'home-mascot');
+  luma.onclick = () => {
+    sfx.click();
+    tipIndex = (tipIndex + 1) % TIPS.length;
+    bubble.textContent = TIPS[tipIndex];
+    luma.classList.remove('hop'); void luma.offsetWidth; luma.classList.add('hop');
+  };
+  const go = (f: () => void) => () => { unlockAudio(); sfx.click(); f(); };
+  const lv = nextLevel();
+  const today = (icon: string, title: string, sub: string, done: boolean, f: () => void) =>
+    h('button.today-card.panel' + (done ? '.done' : ''), { onclick: go(f) },
+      h('span.today-icon', {}, icon), h('span.today-title', {}, title), h('span.today-sub', {}, done ? '✓ Done' : sub));
+  const game = (tier: number, title: string, sub: string, f: () => void) =>
+    h('button.game-card.panel', { onclick: go(f) }, spriteImg(tier, 30, 'game-art'), h('span.game-title', {}, title), h('span.game-sub', {}, sub));
+  const ch = dailyChallenge(todayKey());
+  const el = h('div.screen.home.tabbed', {},
+    h('header.home-head', {},
+      h('div.avatar', {}, mascot('wave')),
+      h('div.rank', {},
+        h('div.rank-title', {}, r.title),
+        h('div.rank-bar', {}, h('div.rank-fill', { style: `width:${r.pct}%` }), h('span.rank-lvl', {}, `Lv ${r.lvl}`))),
+      coinChip(),
+      h('button.icon-btn', { onclick: () => { sfx.click(); settings(); }, 'aria-label': 'Settings' }, '⚙')),
+    h('div.hero', {},
+      h('div.logo', {}, h('div.logo-main', {}, 'Stellar Drop'), h('div.logo-sub', {}, `${THEME_LABEL[profile.settings.theme]} merge puzzle`)),
+      h('div.hero-row', {}, luma, bubble)),
+    h('div.continue.panel.ornate', {},
+      h('div.cont-art', {}, spriteImg(Math.max(4, biggest), 26)),
+      h('div.cont-body', {},
+        h('div.cont-kicker', {}, 'Classic'),
+        h('div.cont-title', {}, profile.bestClassic ? `Best ${profile.bestClassic.toLocaleString('en-US')}` : 'Start your first dome'),
+        h('div.cont-sub', {}, biggest >= 0 ? `Biggest: ${names()[biggest]}` : 'Merge your way up to the Star')),
+      h('button.play-round', { onclick: go(() => startRun(classicMode())), 'aria-label': 'Play' }, '▶')),
+    h('button.level-strip.panel', { onclick: go(() => levelIntro(lv)) },
+      h('span.ls-num', {}, String(lv.id)),
+      h('span.ls-body', {}, h('span.ls-title', {}, `Level ${lv.id}${lv.challenge ? ' · Challenge' : ''}`), h('span.ls-goal', {}, goalText(lv.goal, names()))),
+      h('span.ls-stars', {}, `${totalStars()} ★`)),
+    h('h2.section', {}, 'Today'),
+    h('div.today-row', {},
+      today('🏆', 'Challenge', `${ch.drops} drops`, profile.daily.challengeDone, challenges),
+      today('🌌', 'Constellation', profile.daily.best ? `Best ${profile.daily.best.toLocaleString('en-US')}` : 'New today', false, () => startRun(dailyMode())),
+      today('🎯', 'Missions', `${missionsDone} / ${daily.length}`, missionsDone === daily.length && missionsReady() === 0, challenges)),
+    h('h2.section', {}, 'Games'),
+    h('div.game-row', {},
+      game(1, 'Meteor Rush', profile.bestRush ? `Best ${profile.bestRush.toLocaleString('en-US')}` : '90 seconds', () => startRun(MINIGAMES[0].mode!())),
+      game(7, 'Tiny Dome', profile.bestTiny ? `Best ${profile.bestTiny.toLocaleString('en-US')}` : 'Narrow dome', () => startRun(MINIGAMES[1].mode!())),
+      game(5, 'Zen Orbit', 'No game over', () => startRun(MINIGAMES[2].mode!())),
+      game(3, 'Star Catcher', profile.bestCatcher ? `Best ${profile.bestCatcher}` : 'Tap to catch', startCatcher),
+      game(9, 'Theme', THEME_LABEL[profile.settings.theme], themePicker)),
+    tabBar('home'),
   );
   show(el, null);
+}
+
+/** First-time walkthrough shown over the first Classic game. */
+function guide(over: HTMLElement) {
+  const steps: Array<[Pose, string]> = [
+    ['wave', "Hi, I'm Luma! Drag your finger to aim, then let go to drop a piece."],
+    ['think', 'Two of the same piece touch and merge into the next, bigger one.'],
+    ['worried', "Keep everything below the dashed line. If a piece stays above it for 3 seconds, it's game over."],
+    ['cheer', 'Every 10 merges charge the Gravity Pulse ✦. Now try to make a Star!'],
+  ];
+  let i = 0;
+  const pic = mascot(steps[0][0], 'guide-mascot');
+  const text = h('p', {}, steps[0][1]);
+  const dots = h('div.guide-dots', {}, ...steps.map((_, k) => h('span', { class: k === 0 ? 'on' : '' })));
+  const btn = h('button.btn.primary', {}, 'Next');
+  const box = h('div.guide', {}, h('div.guide-card.panel.ornate', {}, pic, text, dots, btn));
+  btn.onclick = () => {
+    sfx.click();
+    i++;
+    if (i >= steps.length) {
+      profile.seenGuide = true;
+      save();
+      box.remove();
+      return;
+    }
+    pic.setAttribute('src', mascotUrl(steps[i][0]));
+    text.textContent = steps[i][1];
+    [...dots.children].forEach((d, k) => d.classList.toggle('on', k === i));
+    if (i === steps.length - 1) btn.textContent = "Let's play!";
+  };
+  over.append(box);
 }
 
 // ----- Modes -----
@@ -120,6 +227,7 @@ const MINIGAMES: Array<{ id: string; icon: string; name: string; desc: string; b
 function startRun(mode: ModeConfig) {
   const session = new PlaySession(mode, r => results(r), () => (mode.kind === 'level' ? levels() : mode.kind === 'challenge' || mode.kind === 'daily' ? challenges() : ['rush', 'tiny', 'zen'].includes(mode.kind) ? minigames() : home()));
   show(session.el, null, session);
+  if (mode.kind === 'classic' && !profile.seenGuide) guide(session.el);
 }
 
 window.addEventListener('sd-restart', e => startRun((e as CustomEvent<ModeConfig>).detail));
@@ -174,7 +282,8 @@ function resultCard(title: string, score: number, best: boolean, coins: number, 
   playMusic('home');
   const starRow = stars !== null ? h('div.stars-big', {}, ...[1, 2, 3].map(i => h('span', { class: i <= stars ? 'on' : '', style: `--d:${i * 0.25}s` }, '★'))) : null;
   const el = h('div.screen.results', {},
-    h('div.result-card', {},
+    h('div.result-card.panel.ornate', {},
+      mascot(stars !== null || best ? 'cheer' : score > 0 ? 'think' : 'worried', 'result-mascot'),
       h('h1', {}, title),
       starRow,
       h('div.big-score', {}, score.toLocaleString('en-US')),
@@ -204,7 +313,7 @@ function levels() {
     h('span.num', {}, unlocked ? String(lv.id) : '🔒'),
     h('span.lv-stars', {}, '★'.repeat(stars) + '☆'.repeat(3 - stars))));
   });
-  show(h('div.screen.list', {}, topBar('Levels', home), h('p.hint', {}, 'Reach the goal before you run out of drops. Every 5th level is a challenge with a twist.'), grid), home);
+  show(h('div.screen.list.tabbed', {}, topBar('Levels', home), h('p.hint', {}, 'Reach the goal before you run out of drops. Every 5th level is a challenge with a twist.'), grid, tabBar('levels')), home);
 }
 
 function levelIntro(lv: LevelDef) {
@@ -258,7 +367,7 @@ function challenges() {
           onclick: () => { box.claimed.push(m.id); profile.coins += m.reward; save(); sfx.coin(); toast(`+${m.reward} ★ coins`); challenges(); },
         }, `Claim ${m.reward} ★`)));
   };
-  const el = h('div.screen.list', {},
+  const el = h('div.screen.list.tabbed', {},
     topBar('Challenges', home),
     h('div.card.feature', {},
       h('span.card-icon', {}, '🏆'),
@@ -278,6 +387,7 @@ function challenges() {
     ...daily.map(m => missionRow(m, profile.missions)),
     h('h2.section', {}, 'Weekly missions'),
     ...weekly.map(m => missionRow(m, profile.weekly)),
+    tabBar('daily'),
   );
   show(el, home);
 }
@@ -301,7 +411,7 @@ function atlas() {
   const nova = !!profile.atlas[11];
   grid.append(h('div.atlas-card.finale' + (nova ? '' : '.locked'), {}, h('span.card-icon', {}, nova ? '💥' : '🔒'), h('span', {}, nova ? FINALE_NAME[theme] : '???')));
   const found = profile.atlas.filter(Boolean).length;
-  show(h('div.screen.list', {}, topBar('Atlas', home), h('p.hint', {}, `${found} / 12 discovered`), grid), home);
+  show(h('div.screen.list.tabbed', {}, topBar('Atlas', home), h('p.hint', {}, `${found} / 12 discovered`), grid, tabBar('atlas')), home);
 }
 
 // ----- Shop -----
@@ -333,7 +443,7 @@ function shop() {
         profile.coins -= POWER_PRICES[p]; profile.power[p]++; save(); sfx.coin(); shop();
       },
     }, `${POWER_PRICES[p]} ★`));
-  const el = h('div.screen.list', {},
+  const el = h('div.screen.list.tabbed', {},
     topBar('Shop', home),
     h('p.hint', {}, 'Everything here is bought with coins you earn by playing.'),
     h('h2.section', {}, 'Dome skins'),
@@ -343,13 +453,23 @@ function shop() {
       powerCard('pop', '💥', 'Pop', 'Remove one piece'),
       powerCard('swap', '🔄', 'Swap', 'Change the next drop'),
       powerCard('boost', '⏫', 'Boost', 'Level up one piece')),
+    tabBar('shop'),
   );
   show(el, home);
 }
 
 // ----- Theme + settings -----
 
+let pickerTimer = 0;
+function refreshPicker() {
+  clearTimeout(pickerTimer);
+  pickerTimer = window.setTimeout(themePicker, 120);
+}
+
 function themePicker() {
+  for (const t of Object.keys(THEME_LABEL) as Theme[]) {
+    if (!hasArt(0, t)) preloadTheme(t, () => { if (document.querySelector('.theme-opt')) refreshPicker(); });
+  }
   const opts = (Object.keys(THEME_LABEL) as Theme[]).map(t => {
     const row = h('div.theme-preview', {});
     for (const tier of [0, 3, 6, 9]) {
@@ -360,7 +480,7 @@ function themePicker() {
       row.append(c);
     }
     return h('button.theme-opt' + (profile.settings.theme === t ? '.selected' : ''), {
-      onclick: () => { profile.settings.theme = t; save(); sfx.click(); themePicker(); },
+      onclick: () => { profile.settings.theme = t; save(); sfx.click(); preloadTheme(t); themePicker(); },
     }, h('span.card-title', {}, THEME_LABEL[t]), row);
   });
   show(h('div.screen.list', {}, topBar('Theme', home), h('p.hint', {}, 'Pick how the pieces look. The rules are the same in every theme.'), ...opts), home);
