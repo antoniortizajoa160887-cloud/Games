@@ -1,0 +1,36 @@
+<!doctype html>
+<html><body style="margin:0;background:#000">
+<canvas id="icon" width="1024" height="1024"></canvas>
+<canvas id="fg" width="1024" height="1024"></canvas>
+<canvas id="splash" width="1280" height="1920"></canvas>
+<script type="module">
+// Draws the app icon and splash from the game's own art (run: node tools/make-icons.cjs).
+import { sprite } from '../src/game/art.ts';
+function sky(g, w, h) {
+  const lin = g.createLinearGradient(0, 0, 0, h);
+  lin.addColorStop(0, '#2a1a66'); lin.addColorStop(1, '#120c2c');
+  g.fillStyle = lin; g.fillRect(0, 0, w, h);
+  const nb = g.createRadialGradient(w * 0.75, h * 0.2, 0, w * 0.75, h * 0.2, w * 0.8);
+  nb.addColorStop(0, 'rgba(180,90,240,0.45)'); nb.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = nb; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < w / 6; i++) { g.fillStyle = `rgba(255,255,255,${Math.random() * 0.8})`; const s = Math.random() * w / 300 + 1; g.fillRect(Math.random() * w, Math.random() * h, s, s); }
+}
+function planet(g, cx, cy, scale) {
+  const p = sprite(8, 260 * scale);
+  g.drawImage(p, cx - p.width / 2, cy - p.height / 2);
+  const s = sprite(10, 70 * scale);
+  g.drawImage(s, cx + 240 * scale - s.width / 2, cy - 220 * scale - s.height / 2);
+  const d = sprite(0, 40 * scale);
+  g.drawImage(d, cx - 270 * scale - d.width / 2, cy + 200 * scale - d.height / 2);
+}
+const ic = document.getElementById('icon').getContext('2d');
+sky(ic, 1024, 1024); planet(ic, 512, 540, 1.15);
+const fg = document.getElementById('fg').getContext('2d');
+planet(fg, 512, 530, 0.72);
+const sp = document.getElementById('splash').getContext('2d');
+sky(sp, 1280, 1920); planet(sp, 640, 860, 1.4);
+sp.font = '900 150px Nunito, system-ui, sans-serif'; sp.textAlign = 'center';
+const tg = sp.createLinearGradient(0, 1300, 0, 1450); tg.addColorStop(0, '#fff6d0'); tg.addColorStop(1, '#f5a623');
+sp.fillStyle = tg; sp.fillText('Stellar Drop', 640, 1440);
+window.done = true;
+</script></body></html>

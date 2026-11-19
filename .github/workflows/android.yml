@@ -1,0 +1,51 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main, claude/project-thread-baqsn4]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx cap sync android
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon -PversionCode=${{ github.run_number }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stellar-drop-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+      # The game checks this release for a newer build and offers the APK as a download.
+      - name: Publish as the latest APK
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BUILD=$(node -p "require('./dist/version.json').build")
+          cp android/app/build/outputs/apk/debug/app-debug.apk stellar-drop.apk
+          NOTES="build: $BUILD (run ${{ github.run_number }}, ${GITHUB_SHA::7})"
+          if gh release view apk-latest >/dev/null 2>&1; then
+            gh release upload apk-latest stellar-drop.apk --clobber
+            gh release edit apk-latest --notes "$NOTES" --target "$GITHUB_SHA"
+          else
+            gh release create apk-latest stellar-drop.apk --title "Stellar Drop Android (latest)" --notes "$NOTES" --prerelease --target "$GITHUB_SHA"
+          fi
