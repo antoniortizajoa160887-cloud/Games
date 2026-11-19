@@ -15,6 +15,7 @@ import { levelMode, PlaySession, SKINS, type ModeConfig, type RunResult } from '
 import { currentMissions, missionsReady, profile, refreshPeriods, resetProgress, save, totalStars, track, type DomeSkin, type PowerUp } from '../save';
 import { APP_VERSION, BUILD_ID, checkForUpdate, RELEASE_PAGE } from '../update';
 import { openExternal } from '../platform';
+import { lang } from '../i18n';
 import { clear, confetti, h, toast } from './dom';
 
 const app = () => document.getElementById('app')!;
@@ -593,6 +594,9 @@ function settings() {
     toggle('📳 Vibration', 'vibration'),
     toggle('😊 Faces on pieces', 'faces'),
     h('button.btn', { onclick: () => { sfx.click(); themePicker(); } }, `🎨 Theme: ${THEME_LABEL[profile.settings.theme]}`),
+    h('label.setting', {}, h('span', {}, '🌐 Language'),
+      h('select.lang', { onchange: (e: Event) => { profile.settings.lang = (e.target as HTMLSelectElement).value as 'auto' | 'en' | 'es'; save(); document.documentElement.lang = lang(); settings(); } },
+        ...([['auto', 'Phone language'], ['en', 'English'], ['es', 'Español']] as const).map(([v, label]) => h('option', { value: v, selected: profile.settings.lang === v }, label)))),
     h('h2.section', {}, 'Updates'),
     h('p.small', {}, `Version ${APP_VERSION} · build ${BUILD_ID}`),
     h('button.btn', {

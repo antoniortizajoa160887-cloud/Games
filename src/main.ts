@@ -2,10 +2,12 @@ import './styles.css';
 import { unlockAudio } from './audio';
 import { onBack } from './platform';
 import { preloadTheme } from './game/art';
+import { startI18n } from './i18n';
 import { profile, refreshPeriods, save } from './save';
 import { handleBack, home } from './ui/screens';
 import { watchForUpdates } from './update';
 
+startI18n();
 refreshPeriods();
 save();
 // Show the menu once the piece art is ready (or after a short wait on slow phones).

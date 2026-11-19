@@ -4,6 +4,7 @@ import { drawPiece, TIER_COLORS, type Theme } from '../game/art';
 import { buzz } from '../platform';
 import { profile } from '../save';
 import { h } from '../ui/dom';
+import { tr } from '../i18n';
 import { fitCanvas, Shell, type ArcadeGame, type ArcadeHooks } from './shell';
 
 const COLS = 13;
@@ -172,7 +173,7 @@ export class SnakeGame implements ArcadeGame {
       g.fillStyle = 'rgba(255,255,255,0.9)';
       g.font = '800 18px Fredoka, Nunito, sans-serif';
       g.textAlign = 'center';
-      g.fillText('Swipe to start', this.w / 2, this.oy + cs * 3);
+      g.fillText(tr('Swipe to start'), this.w / 2, this.oy + cs * 3);
     }
     const [hx, hy] = at(this.body[0].p);
     g.save();

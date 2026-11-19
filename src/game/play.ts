@@ -7,6 +7,7 @@ import { COMET, COMET_EVERY, DROP_WEIGHTS, STAR } from '../core/tiers';
 import { buzz } from '../platform';
 import { profile, save, track, type PowerUp } from '../save';
 import { h } from '../ui/dom';
+import { tr } from '../i18n';
 import { drawFace, FINALE_NAME, hasArt, mascotUrl, sprite, THEME_NAMES, themeBg, TIER_COLORS, tierRadius, type Pose, type Theme } from './art';
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
@@ -353,7 +354,7 @@ export class PlaySession {
   }
 
   private popup(x: number, y: number, text: string, color: string, size: number) {
-    this.popups.push({ x, y, text, life: 0, color, size });
+    this.popups.push({ x, y, text: tr(text), life: 0, color, size });
   }
 
   // ----- input -----

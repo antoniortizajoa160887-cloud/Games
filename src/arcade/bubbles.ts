@@ -3,6 +3,7 @@ import { drawPiece, type Theme } from '../game/art';
 import { buzz } from '../platform';
 import { profile } from '../save';
 import { h } from '../ui/dom';
+import { tr } from '../i18n';
 import { DISTINCT, fitCanvas, Shell, type ArcadeGame, type ArcadeHooks } from './shell';
 
 const COLS = 8;
@@ -234,7 +235,7 @@ export class BubblesGame implements ArcadeGame {
     g.fillStyle = 'rgba(255,255,255,0.7)';
     g.font = '700 11px Nunito, sans-serif';
     g.textAlign = 'center';
-    g.fillText('NEXT', this.sx + R * 3.4, this.sy - R * 0.9);
+    g.fillText(tr('NEXT'), this.sx + R * 3.4, this.sy - R * 0.9);
     drawPiece(g, this.next, this.sx + R * 3.4, this.sy, R * 0.7, this.theme, this.dpr);
   }
 }

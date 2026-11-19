@@ -10,6 +10,7 @@ export interface Settings {
   vibration: boolean;
   faces: boolean;
   theme: 'space' | 'sea' | 'gems' | 'sweets';
+  lang: 'auto' | 'en' | 'es';
 }
 
 export interface Profile {
@@ -51,7 +52,7 @@ function fresh(): Profile {
     missions: { key: '', progress: {}, claimed: [] },
     weekly: { key: '', progress: {}, claimed: [] },
     totals: { runs: 0, merges: 0, supernovas: 0 },
-    settings: { music: 0.6, sfx: 0.8, vibration: true, faces: true, theme: 'space' },
+    settings: { music: 0.6, sfx: 0.8, vibration: true, faces: true, theme: 'space', lang: 'auto' },
     seenGuide: false,
   };
 }

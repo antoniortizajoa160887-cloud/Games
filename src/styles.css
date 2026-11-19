@@ -302,3 +302,4 @@ h2.section { font-size: 17px; margin: 18px 0 8px; color: var(--gold); }
 .pc-front { background: linear-gradient(180deg, #fff8e6, #f0e2ff); transform: rotateY(180deg); }
 .pcard.done .pc-front { animation: tile-pop 0.3s; box-shadow: 0 0 16px rgba(255, 207, 90, 0.9); }
 .pcard.done { opacity: 0.55; transition: opacity 0.4s 0.3s; }
+.setting select.lang { font: inherit; font-weight: 800; color: var(--text); background: rgba(20, 12, 50, 0.8); border: 1.5px solid rgba(255, 207, 90, 0.5); border-radius: 12px; padding: 6px 8px; max-width: 55%; }
