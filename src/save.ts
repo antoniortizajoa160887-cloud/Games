@@ -11,6 +11,7 @@ export interface Settings {
   faces: boolean;
   theme: 'space' | 'sea' | 'gems' | 'sweets';
   lang: 'auto' | 'en' | 'es';
+  howTo: boolean; // open How to play the first time each game is played
 }
 
 export interface Profile {
@@ -31,6 +32,7 @@ export interface Profile {
   totals: { runs: number; merges: number; supernovas: number };
   settings: Settings;
   seenGuide: boolean;
+  seenHow: string[]; // games whose How to play has been shown
 }
 
 const KEY = 'stellar-drop-save-v1';
@@ -52,8 +54,9 @@ function fresh(): Profile {
     missions: { key: '', progress: {}, claimed: [] },
     weekly: { key: '', progress: {}, claimed: [] },
     totals: { runs: 0, merges: 0, supernovas: 0 },
-    settings: { music: 0.6, sfx: 0.8, vibration: true, faces: true, theme: 'space', lang: 'auto' },
+    settings: { music: 0.6, sfx: 0.8, vibration: true, faces: true, theme: 'space', lang: 'auto', howTo: true },
     seenGuide: false,
+    seenHow: [],
   };
 }
 

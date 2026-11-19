@@ -1,5 +1,6 @@
 import { playMusic, sfx, type Track } from '../audio';
 import { h } from '../ui/dom';
+import { firstTime, helpButton, openGuide, type GuideId } from '../ui/howto';
 
 /** What every Arcade game hands back to the menu screens. */
 export interface ArcadeGame {
@@ -9,6 +10,8 @@ export interface ArcadeGame {
 }
 
 export interface ArcadeHooks {
+  /** Which How to play guide this game uses. */
+  guide: GuideId;
   onEnd(score: number): void;
   onQuit(): void;
   onRestart(): void;
@@ -26,6 +29,7 @@ export class Shell {
   paused = false;
   ended = false;
   onPause: (paused: boolean) => void = () => {};
+  private held = false;
 
   constructor(title: string, sub: string, private hooks: ArcadeHooks, music: Track = 'play') {
     this.scoreEl = h('div.score-num', {}, '0');
@@ -35,11 +39,27 @@ export class Shell {
       h('div.arcade-top', {},
         h('button.icon-btn', { onclick: () => this.togglePause(), 'aria-label': 'Pause' }, 'II'),
         h('div.score-box', {}, h('div.mode-title', {}, title), this.scoreEl, this.subEl),
-        h('span.arcade-spacer'),
+        helpButton(hooks.guide, this),
       ),
       this.body,
     );
     playMusic(music);
+    firstTime(hooks.guide, this);
+  }
+
+  /** Holds the game still without the pause menu (while How to play is open). */
+  hold(on: boolean) {
+    if (this.ended) return;
+    if (on) {
+      if (this.paused) return;
+      this.held = true;
+      this.paused = true;
+      this.onPause(true);
+    } else if (this.held) {
+      this.held = false;
+      this.paused = false;
+      this.onPause(false);
+    }
   }
 
   setScore(n: number) { this.scoreEl.textContent = n.toLocaleString('en-US'); }
@@ -56,6 +76,7 @@ export class Shell {
       h('h2', {}, 'Paused'),
       h('button.btn.primary', { onclick: () => this.togglePause() }, '▶ Resume'),
       h('button.btn', { onclick: () => { this.ended = true; this.hooks.onRestart(); } }, '↻ Restart'),
+      h('button.btn', { onclick: () => { sfx.click(); openGuide(this.hooks.guide); } }, '❓ How to play'),
       h('button.btn', { onclick: () => { this.ended = true; this.hooks.onQuit(); } }, '⌂ Quit'),
     ));
   }

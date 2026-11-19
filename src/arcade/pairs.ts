@@ -42,7 +42,7 @@ export class PairsGame implements ArcadeGame {
   private tick() {
     window.clearInterval(this.timer);
     this.timer = window.setInterval(() => {
-      if (this.shell.ended) return;
+      if (this.shell.ended || this.shell.paused) return;
       this.time--;
       this.shell.setSub(`⏱ ${this.time}s · Board ${this.round}`);
       if (this.time <= 5 && this.time > 0) sfx.warn();

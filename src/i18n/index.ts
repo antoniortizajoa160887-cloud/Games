@@ -69,6 +69,7 @@ const done = new WeakMap<Text, string>();
 
 function fix(node: Text) {
   if (done.get(node) === node.data) return;
+  if (node.parentElement?.closest('[data-i18n="off"]')) return;
   const out = tr(node.data);
   done.set(node, out);
   if (out !== node.data) node.data = out;

@@ -314,4 +314,9 @@ export const ES: Record<string, string> = {
   'Planet rings are made of countless chunks of ice and rock.': 'Los anillos planetarios están hechos de incontables trozos de hielo y roca.',
   'A gas giant has no solid ground to stand on.': 'Un gigante gaseoso no tiene suelo firme donde pararse.',
   'A star shines because it fuses hydrogen into helium in its core.': 'Una estrella brilla porque fusiona hidrógeno en helio en su núcleo.',
+  // How to play
+  'How to play': 'Cómo jugar',
+  '❓ How to play': '❓ Cómo jugar',
+  '💡 Show how to play on first game': '💡 Mostrar cómo jugar la primera vez',
+  'Tap ? at the top any time to read all the rules, controls and tips.': 'Toca ? arriba cuando quieras para ver todas las reglas, controles y consejos.',
 };

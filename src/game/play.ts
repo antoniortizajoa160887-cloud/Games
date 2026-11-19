@@ -8,6 +8,7 @@ import { buzz } from '../platform';
 import { profile, save, track, type PowerUp } from '../save';
 import { h } from '../ui/dom';
 import { tr } from '../i18n';
+import { helpButton, openGuide, type GuideId } from '../ui/howto';
 import { drawFace, FINALE_NAME, hasArt, mascotUrl, sprite, THEME_NAMES, themeBg, TIER_COLORS, tierRadius, type Pose, type Theme } from './art';
 
 const { Engine, Bodies, Body, Composite, Events } = Matter;
@@ -108,6 +109,7 @@ export class PlaySession {
   private usedSecondChance = false;
   private targeting: PowerUp | null = null;
   private paused = false;
+  private held = false;
   private ended = false;
   private startedAt = performance.now();
   private elapsedPaused = 0;
@@ -174,6 +176,12 @@ export class PlaySession {
     this.resizeObs.disconnect();
     Engine.clear(this.engine);
     this.el.remove();
+  }
+
+  /** Which How to play guide this mode uses. */
+  guideId(): GuideId {
+    const k = this.mode.kind;
+    return k === 'rush' || k === 'tiny' || k === 'zen' ? k : 'drop';
   }
 
   /** Android back button: pause first, then leave. */
@@ -582,6 +590,7 @@ export class PlaySession {
       h('h2', {}, 'Paused'),
       h('button.btn.primary', { onclick: () => { box.remove(); this.resume(); } }, '▶ Resume'),
       h('button.btn', { onclick: () => { box.remove(); this.restart(); } }, '↻ Restart'),
+      h('button.btn', { onclick: () => { sfx.click(); openGuide(this.guideId()); } }, '❓ How to play'),
       h('div.row',
         {},
         h('label', {}, '🎵', h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: profile.settings.music, oninput: (e: Event) => { profile.settings.music = Number((e.target as HTMLInputElement).value); applyVolumes(); save(); } })),
@@ -591,6 +600,19 @@ export class PlaySession {
     );
     box.classList.add('pause-menu');
     this.el.append(box);
+  }
+
+  /** Holds the game still without the pause menu (while How to play is open). */
+  hold(on: boolean) {
+    if (this.ended) return;
+    if (on) {
+      if (this.paused) return;
+      this.held = true;
+      this.pause(false);
+    } else if (this.held) {
+      this.held = false;
+      this.resume();
+    }
   }
 
   private resume() {
@@ -651,7 +673,7 @@ export class PlaySession {
     this.hud.hint = h('div.target-hint', {}, '');
     return h('div.hud', {},
       h('div.hud-top', {},
-        h('button.icon-btn', { onclick: () => this.pause(), 'aria-label': 'Pause' }, 'II'),
+        h('div.hud-btns', {}, h('button.icon-btn', { onclick: () => this.pause(), 'aria-label': 'Pause' }, 'II'), helpButton(this.guideId(), this)),
         h('div.score-box', {}, h('div.mode-title', {}, m.title), this.hud.score, this.hud.sub),
         h('div.next-box', {}, h('div.next-label', {}, 'Next'), this.nextCanvas),
       ),

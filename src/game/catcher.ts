@@ -2,6 +2,7 @@ import { playMusic, sfx } from '../audio';
 import { buzz } from '../platform';
 import { profile } from '../save';
 import { h } from '../ui/dom';
+import { firstTime, helpButton, openGuide } from '../ui/howto';
 import { sprite, THEME_NAMES, TIER_COLORS, type Theme } from './art';
 
 export interface CatcherResult { score: number; best: boolean }
@@ -32,6 +33,7 @@ export class CatcherSession {
   private last = performance.now();
   private ended = false;
   private paused = false;
+  private held = false;
   private dpr = 1;
   private hudScore: HTMLElement;
   private hudTime: HTMLElement;
@@ -49,7 +51,7 @@ export class CatcherSession {
       this.canvas,
       h('div.hud', {},
         h('div.hud-top', {},
-          h('button.icon-btn', { onclick: () => this.togglePause(), 'aria-label': 'Pause' }, 'II'),
+          h('div.hud-btns', {}, h('button.icon-btn', { onclick: () => this.togglePause(), 'aria-label': 'Pause' }, 'II'), helpButton('catcher', this)),
           h('div.score-box', {}, h('div.mode-title', {}, 'Star Catcher'), this.hudScore, h('div.score-sub', {}, profile.bestCatcher ? `Best ${profile.bestCatcher}` : 'Tap the matching pieces')),
           h('div.next-box', {}, h('div.next-label', {}, 'Catch'), this.hudTarget, this.hudTargetName),
         ),
@@ -61,6 +63,21 @@ export class CatcherSession {
     playMusic('catcher');
     this.drawTarget();
     this.raf = requestAnimationFrame(t => this.frame(t));
+    firstTime('catcher', this);
+  }
+
+  /** Holds the game still without the pause menu (while How to play is open). */
+  hold(on: boolean) {
+    if (this.ended) return;
+    if (on) {
+      if (this.paused) return;
+      this.held = true;
+      this.paused = true;
+    } else if (this.held) {
+      this.held = false;
+      this.paused = false;
+      this.last = performance.now();
+    }
   }
 
   destroy() {
@@ -82,6 +99,7 @@ export class CatcherSession {
       this.el.append(h('div.modal', {},
         h('h2', {}, 'Paused'),
         h('button.btn.primary', { onclick: () => this.togglePause() }, '▶ Resume'),
+        h('button.btn', { onclick: () => { sfx.click(); openGuide('catcher'); } }, '❓ How to play'),
         h('button.btn', { onclick: () => { this.ended = true; this.onQuit(); } }, '⌂ Quit to menu'),
       ));
     } else this.last = performance.now();

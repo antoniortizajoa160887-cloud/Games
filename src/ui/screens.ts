@@ -17,6 +17,7 @@ import { APP_VERSION, BUILD_ID, checkForUpdate, RELEASE_PAGE } from '../update';
 import { openExternal } from '../platform';
 import { lang } from '../i18n';
 import { clear, confetti, h, toast } from './dom';
+import { closeGuide, firstTime, GUIDE_NAME, GUIDE_ORDER, markSeen, openGuide, type GuideId } from './howto';
 
 const app = () => document.getElementById('app')!;
 
@@ -29,6 +30,7 @@ function show(el: HTMLElement, back: (() => void) | null, session: Active | null
   active = session;
   backTo = back;
   document.querySelectorAll('.modal.overlay').forEach(m => m.remove());
+  closeGuide();
   const root = app();
   clear(root);
   root.style.backgroundImage = `url(${bgUrl(profile.settings.theme)})`;
@@ -38,6 +40,7 @@ function show(el: HTMLElement, back: (() => void) | null, session: Active | null
 
 /** Android back button. Returns false when on the home screen (the app then closes). */
 export function handleBack(): boolean {
+  if (closeGuide()) return true;
   if (document.querySelector('.modal.overlay')) {
     document.querySelector('.modal.overlay')!.remove();
     return true;
@@ -150,6 +153,7 @@ export function home() {
         h('div.rank-title', {}, r.title),
         h('div.rank-bar', {}, h('div.rank-fill', { style: `width:${r.pct}%` }), h('span.rank-lvl', {}, `Lv ${r.lvl}`))),
       coinChip(),
+      h('button.icon-btn.help-btn', { onclick: () => { sfx.click(); openGuide('drop'); }, 'aria-label': 'How to play' }, '?'),
       h('button.icon-btn', { onclick: () => { sfx.click(); settings(); }, 'aria-label': 'Settings' }, '⚙')),
     h('div.hero', {},
       h('div.logo', {}, h('div.logo-main', {}, 'Stellar Drop'), h('div.logo-sub', {}, `${THEME_LABEL[profile.settings.theme]} merge puzzle`)),
@@ -191,6 +195,7 @@ function guide(over: HTMLElement) {
     ['think', 'Two of the same piece touch and merge into the next, bigger one.'],
     ['worried', "Keep everything below the dashed line. If a piece stays above it for 3 seconds, it's game over."],
     ['cheer', 'Every 10 merges charge the Gravity Pulse ✦. Now try to make a Star!'],
+    ['think', 'Tap ? at the top any time to read all the rules, controls and tips.'],
   ];
   let i = 0;
   const pic = mascot(steps[0][0], 'guide-mascot');
@@ -203,6 +208,7 @@ function guide(over: HTMLElement) {
     i++;
     if (i >= steps.length) {
       profile.seenGuide = true;
+      markSeen('drop');
       save();
       box.remove();
       return;
@@ -225,7 +231,7 @@ function dailyMode(): ModeConfig {
   return { kind: 'daily', title: 'Daily Constellation', width: 400, pegs: [], maxDropTier: 4, seed: hashSeed('daily:' + todayKey()), dropCooldown: 420, powerUps: false, secondChance: false, music: 'play' };
 }
 
-const MINIGAMES: Array<{ id: string; icon: string; name: string; desc: string; best: () => number; mode?: () => ModeConfig }> = [
+const MINIGAMES: Array<{ id: GuideId; icon: string; name: string; desc: string; best: () => number; mode?: () => ModeConfig }> = [
   { id: 'rush', icon: '☄️', name: 'Meteor Rush', desc: '90 seconds, fast drops. Score as much as you can.', best: () => profile.bestRush,
     mode: () => ({ kind: 'rush', title: 'Meteor Rush', width: 400, pegs: [], maxDropTier: 3, timeLimit: 90, dropCooldown: 200, powerUps: false, secondChance: false, music: 'rush' }) },
   { id: 'tiny', icon: '🔭', name: 'Tiny Dome', desc: 'A narrow dome. Survive as long as you can.', best: () => profile.bestTiny,
@@ -240,7 +246,9 @@ const GAME_ART: Record<string, number> = { rush: 1, tiny: 7, zen: 5, catcher: 3 
 function startRun(mode: ModeConfig) {
   const session = new PlaySession(mode, r => results(r), () => (mode.kind === 'level' ? levels() : mode.kind === 'challenge' || mode.kind === 'daily' ? challenges() : ['rush', 'tiny', 'zen'].includes(mode.kind) ? minigames() : home()));
   show(session.el, null, session);
-  if (mode.kind === 'classic' && !profile.seenGuide) guide(session.el);
+  const gid = session.guideId();
+  if (gid === 'drop') { if (!profile.seenGuide && profile.settings.howTo !== false) guide(session.el); }
+  else firstTime(gid, session);
 }
 
 window.addEventListener('sd-restart', e => startRun((e as CustomEvent<ModeConfig>).detail));
@@ -377,7 +385,7 @@ function levelIntro(lv: LevelDef) {
 // ----- Arcade -----
 
 type Category = 'All' | 'Merge' | 'Puzzle' | 'Action' | 'Relax';
-interface ArcadeDef { id: string; name: string; tag: string; desc: string; art: number; cat: Category; coinDiv: number; make: (hooks: ArcadeHooks) => ArcadeGame }
+interface ArcadeDef { id: GuideId; name: string; tag: string; desc: string; art: number; cat: Category; coinDiv: number; make: (hooks: ArcadeHooks) => ArcadeGame }
 
 const ARCADE: ArcadeDef[] = [
   { id: 'fusion', name: 'Planet Fusion', tag: 'Swipe & merge', desc: 'Swipe the board. Matching pieces merge into bigger ones.', art: 6, cat: 'Merge', coinDiv: 40, make: hk => new FusionGame(hk) },
@@ -393,9 +401,9 @@ let arcadeCat: Category = 'All';
 function arcade(cat: Category = arcadeCat) {
   arcadeCat = cat;
   playMusic('home');
-  const entries: Array<{ name: string; desc: string; art: number; cat: Category; best: number; play: () => void }> = [
-    ...ARCADE.map(a => ({ name: a.name, desc: a.desc, art: a.art, cat: a.cat, best: profile.arcade[a.id] ?? 0, play: () => startArcade(a) })),
-    ...MINIGAMES.map(m => ({ name: m.name, desc: m.desc, art: GAME_ART[m.id] ?? 4, cat: (m.id === 'zen' ? 'Relax' : m.id === 'tiny' ? 'Merge' : 'Action') as Category, best: m.best(), play: () => (m.mode ? startRun(m.mode()) : startCatcher()) })),
+  const entries: Array<{ id: GuideId; name: string; desc: string; art: number; cat: Category; best: number; play: () => void }> = [
+    ...ARCADE.map(a => ({ id: a.id, name: a.name, desc: a.desc, art: a.art, cat: a.cat, best: profile.arcade[a.id] ?? 0, play: () => startArcade(a) })),
+    ...MINIGAMES.map(m => ({ id: m.id, name: m.name, desc: m.desc, art: GAME_ART[m.id] ?? 4, cat: (m.id === 'zen' ? 'Relax' : m.id === 'tiny' ? 'Merge' : 'Action') as Category, best: m.best(), play: () => (m.mode ? startRun(m.mode()) : startCatcher()) })),
   ];
   const chips = h('div.chips', {}, ...(['All', 'Merge', 'Puzzle', 'Action', 'Relax'] as Category[]).map(c =>
     h('button.chip' + (c === cat ? '.on' : ''), { onclick: () => { sfx.click(); arcade(c); } }, c)));
@@ -404,12 +412,22 @@ function arcade(cat: Category = arcadeCat) {
       h('div.ac-art', {}, spriteImg(e.art, 30)),
       h('div.ac-name', {}, e.name),
       h('div.ac-desc', {}, e.desc),
-      h('div.ac-best', {}, e.best ? `Best ${e.best.toLocaleString('en-US')}` : 'New'))));
+      h('div.ac-best', {}, e.best ? `Best ${e.best.toLocaleString('en-US')}` : 'New'),
+      howToChip(e.id))));
   show(h('div.screen.list.tabbed', {}, topBar('Arcade', home), chips, list, tabBar('arcade')), home);
+}
+
+/** Small ? on a game card that opens its How to play (without starting the game). */
+function howToChip(id: GuideId): HTMLElement {
+  return h('span.howto-chip', {
+    role: 'button', tabindex: 0, 'aria-label': 'How to play',
+    onclick: (e: Event) => { e.stopPropagation(); sfx.click(); openGuide(id); },
+  }, '?');
 }
 
 function startArcade(a: ArcadeDef) {
   const game = a.make({
+    guide: a.id,
     onEnd: score => {
       const best = score > (profile.arcade[a.id] ?? 0);
       if (best) profile.arcade[a.id] = score;
@@ -434,7 +452,8 @@ function minigames() {
   for (const g of MINIGAMES) {
     list.append(h('button.card', { onclick: () => { unlockAudio(); sfx.click(); if (g.mode) startRun(g.mode()); else startCatcher(); } },
       spriteImg(GAME_ART[g.id] ?? 4, 24),
-      h('span.card-body', {}, h('span.card-title', {}, g.name), h('span.card-desc', {}, g.desc), g.best() ? h('span.card-best', {}, `Best ${g.best().toLocaleString('en-US')}`) : null)));
+      h('span.card-body', {}, h('span.card-title', {}, g.name), h('span.card-desc', {}, g.desc), g.best() ? h('span.card-best', {}, `Best ${g.best().toLocaleString('en-US')}`) : null),
+      howToChip(g.id)));
   }
   show(h('div.screen.list', {}, topBar('Minigames', home), list), home);
 }
@@ -584,7 +603,7 @@ function themePicker() {
 function settings() {
   const slider = (label: string, key: 'music' | 'sfx') => h('label.setting', {}, h('span', {}, label),
     h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: profile.settings[key], oninput: (e: Event) => { profile.settings[key] = Number((e.target as HTMLInputElement).value); applyVolumes(); save(); } }));
-  const toggle = (label: string, key: 'vibration' | 'faces') => h('label.setting', {}, h('span', {}, label),
+  const toggle = (label: string, key: 'vibration' | 'faces' | 'howTo') => h('label.setting', {}, h('span', {}, label),
     h('input', { type: 'checkbox', checked: profile.settings[key], onchange: (e: Event) => { profile.settings[key] = (e.target as HTMLInputElement).checked; save(); } }));
   const status = h('p.small', {}, '');
   const el = h('div.screen.list', {},
@@ -597,6 +616,9 @@ function settings() {
     h('label.setting', {}, h('span', {}, '🌐 Language'),
       h('select.lang', { onchange: (e: Event) => { profile.settings.lang = (e.target as HTMLSelectElement).value as 'auto' | 'en' | 'es'; save(); document.documentElement.lang = lang(); settings(); } },
         ...([['auto', 'Phone language'], ['en', 'English'], ['es', 'Español']] as const).map(([v, label]) => h('option', { value: v, selected: profile.settings.lang === v }, label)))),
+    h('h2.section', {}, 'How to play'),
+    toggle('💡 Show how to play on first game', 'howTo'),
+    h('div.howto-list', {}, ...GUIDE_ORDER.map(id => h('button.chip', { onclick: () => { sfx.click(); openGuide(id); } }, GUIDE_NAME[id]))),
     h('h2.section', {}, 'Updates'),
     h('p.small', {}, `Version ${APP_VERSION} · build ${BUILD_ID}`),
     h('button.btn', {
