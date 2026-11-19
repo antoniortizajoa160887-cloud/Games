@@ -201,6 +201,9 @@ const STYLES: Record<Exclude<Track, 'none'>, Style> = {
 };
 const PENTA = [0, 2, 4, 7, 9];
 
+/** Tracks that reuse another recording. */
+const FILE: Partial<Record<Track, string>> = { catcher: 'rush' };
+
 let current: Track = 'none';
 let timer: number | undefined;
 let nextBeat = 0;
@@ -215,11 +218,17 @@ export function playMusic(track: Track) {
   if (fileMusic) { fileMusic.pause(); fileMusic = null; }
   if (track === 'none') return;
   if (!missingFiles.has(track)) {
-    const a = new Audio(`audio/music-${track}.mp3`);
+    const a = new Audio(`audio/music-${FILE[track] ?? track}.mp3`);
     a.loop = true;
     a.volume = profile.settings.music * 0.7;
-    a.addEventListener('error', () => { missingFiles.add(track); if (current === track) startScheduler(track); }, { once: true });
-    a.play().then(() => { if (current === track) fileMusic = a; else a.pause(); }).catch(() => { missingFiles.add(track); if (current === track) startScheduler(track); });
+    fileMusic = a;
+    a.addEventListener('error', () => { missingFiles.add(track); if (current === track) { fileMusic = null; startScheduler(track); } }, { once: true });
+    const start = () => a.play().catch((e: unknown) => {
+      // Browsers block sound until the first tap: try again then. Anything else means no file.
+      if ((e as Error)?.name === 'NotAllowedError') window.addEventListener('pointerdown', () => { if (fileMusic === a) void start(); }, { once: true });
+      else if (current === track) { missingFiles.add(track); fileMusic = null; startScheduler(track); }
+    });
+    void start();
     return;
   }
   startScheduler(track);

@@ -32,3 +32,21 @@ export function toast(text: string, ms = 1800) {
   requestAnimationFrame(() => t.classList.add('show'));
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, ms);
 }
+
+/** A short burst of confetti over the whole screen. */
+export function confetti(count = 70) {
+  const colors = ['#ffcf5a', '#ff7ad9', '#7ad0ff', '#9dff8a', '#ffffff', '#b58cff'];
+  const layer = h('div.confetti', {});
+  for (let i = 0; i < count; i++) {
+    const p = h('i', {});
+    p.style.left = `${Math.random() * 100}%`;
+    p.style.background = colors[i % colors.length];
+    p.style.setProperty('--dx', `${(Math.random() - 0.5) * 160}px`);
+    p.style.setProperty('--r', `${(Math.random() - 0.5) * 1080}deg`);
+    p.style.animationDelay = `${Math.random() * 0.5}s`;
+    p.style.animationDuration = `${1.8 + Math.random() * 1.4}s`;
+    layer.append(p);
+  }
+  document.body.append(layer);
+  setTimeout(() => layer.remove(), 3800);
+}

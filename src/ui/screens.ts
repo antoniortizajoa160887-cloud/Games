@@ -8,7 +8,7 @@ import { levelMode, PlaySession, SKINS, type ModeConfig, type RunResult } from '
 import { currentMissions, missionsReady, profile, refreshPeriods, resetProgress, save, totalStars, track, type DomeSkin, type PowerUp } from '../save';
 import { APP_VERSION, BUILD_ID, checkForUpdate, RELEASE_PAGE } from '../update';
 import { openExternal } from '../platform';
-import { clear, h, toast } from './dom';
+import { clear, confetti, h, toast } from './dom';
 
 const app = () => document.getElementById('app')!;
 
@@ -20,6 +20,7 @@ function show(el: HTMLElement, back: (() => void) | null, session: Active | null
   active?.destroy();
   active = session;
   backTo = back;
+  document.querySelectorAll('.modal.overlay').forEach(m => m.remove());
   const root = app();
   clear(root);
   root.style.backgroundImage = `url(${bgUrl(profile.settings.theme)})`;
@@ -224,6 +225,8 @@ const MINIGAMES: Array<{ id: string; icon: string; name: string; desc: string; b
   { id: 'catcher', icon: '✨', name: 'Star Catcher', desc: 'Tap the falling pieces that match the target. 60 seconds.', best: () => profile.bestCatcher },
 ];
 
+const GAME_ART: Record<string, number> = { rush: 1, tiny: 7, zen: 5, catcher: 3 };
+
 function startRun(mode: ModeConfig) {
   const session = new PlaySession(mode, r => results(r), () => (mode.kind === 'level' ? levels() : mode.kind === 'challenge' || mode.kind === 'daily' ? challenges() : ['rush', 'tiny', 'zen'].includes(mode.kind) ? minigames() : home()));
   show(session.el, null, session);
@@ -296,24 +299,54 @@ function resultCard(title: string, score: number, best: boolean, coins: number, 
     ),
   );
   if (coins > 0) setTimeout(() => sfx.coin(), 500);
+  if (best || (stars ?? 0) >= 1) setTimeout(() => confetti(), 250);
   show(el, back);
 }
 
 // ----- Levels -----
 
+const REGIONS = [
+  { name: 'Moon Meadows', tier: 5 },
+  { name: 'Ring Belt', tier: 8 },
+  { name: 'Star Forge', tier: 10 },
+];
+
 function levels() {
   playMusic('home');
-  const grid = h('div.level-grid', {});
+  const current = nextLevel().id;
+  const ROW = 92;
+  const xs = LEVELS.map((_, i) => 50 + 30 * Math.sin(i * 0.95));
+  const per = 10;
+  const banners = Math.ceil(LEVELS.length / per);
+  const BANNER = 70;
+  const yOf = (i: number) => Math.floor(i / per + 1) * BANNER + i * ROW + ROW / 2;
+  const height = yOf(LEVELS.length - 1) + ROW / 2 + 10;
+  const path = LEVELS.map((_, i) => `${i ? 'L' : 'M'}${xs[i]} ${yOf(i)}`).join(' ');
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 100 ${height}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.classList.add('path-line');
+  svg.innerHTML = `<path d="${path}" /><path class="done" d="${LEVELS.slice(0, current).map((_, i) => `${i ? 'L' : 'M'}${xs[i]} ${yOf(i)}`).join(' ')}" />`;
+  const map = h('div.level-map', { style: `height:${height}px` }, svg);
+  for (let b = 0; b < banners; b++) {
+    const r = REGIONS[b % REGIONS.length];
+    map.append(h('div.region.panel', { style: `top:${b * (per * ROW + BANNER) + 8}px` }, spriteImg(r.tier, 16), h('span', {}, r.name), h('span.region-n', {}, `${b * per + 1}–${Math.min(LEVELS.length, (b + 1) * per)}`)));
+  }
   LEVELS.forEach((lv, i) => {
     const stars = profile.levelStars[i] ?? 0;
     const unlocked = i === 0 || (profile.levelStars[i - 1] ?? 0) > 0;
-    grid.append(h('button.level-cell' + (lv.challenge ? '.challenge' : '') + (unlocked ? '' : '.locked'), {
+    const node = h('button.node' + (lv.challenge ? '.challenge' : '') + (unlocked ? '' : '.locked') + (lv.id === current ? '.current' : ''), {
+      style: `left:${xs[i]}%;top:${yOf(i)}px`,
       onclick: () => { if (!unlocked) { toast('Finish the level before to unlock this one'); return; } sfx.click(); levelIntro(lv); },
     },
     h('span.num', {}, unlocked ? String(lv.id) : '🔒'),
-    h('span.lv-stars', {}, '★'.repeat(stars) + '☆'.repeat(3 - stars))));
+    unlocked ? h('span.node-stars', {}, ...[1, 2, 3].map(k => h('span', { class: k <= stars ? 'on' : '' }, '★'))) : null,
+    lv.id === current ? mascot('wave', 'node-mascot' + (xs[i] > 50 ? '.left' : '')) : null);
+    map.append(node);
   });
-  show(h('div.screen.list.tabbed', {}, topBar('Levels', home), h('p.hint', {}, 'Reach the goal before you run out of drops. Every 5th level is a challenge with a twist.'), grid, tabBar('levels')), home);
+  const el = h('div.screen.list.tabbed', {}, topBar('Levels', home), h('p.hint', {}, `${totalStars()} / ${LEVELS.length * 3} ★ · Every 5th level is a challenge with a twist.`), map, tabBar('levels'));
+  show(el, home);
+  requestAnimationFrame(() => el.querySelector('.node.current')?.scrollIntoView({ block: 'center' }));
 }
 
 function levelIntro(lv: LevelDef) {
@@ -338,7 +371,7 @@ function minigames() {
   const list = h('div.cards', {});
   for (const g of MINIGAMES) {
     list.append(h('button.card', { onclick: () => { unlockAudio(); sfx.click(); if (g.mode) startRun(g.mode()); else startCatcher(); } },
-      h('span.card-icon', {}, g.icon),
+      spriteImg(GAME_ART[g.id] ?? 4, 24),
       h('span.card-body', {}, h('span.card-title', {}, g.name), h('span.card-desc', {}, g.desc), g.best() ? h('span.card-best', {}, `Best ${g.best().toLocaleString('en-US')}`) : null)));
   }
   show(h('div.screen.list', {}, topBar('Minigames', home), list), home);
