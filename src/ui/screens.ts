@@ -4,6 +4,13 @@ import { hashSeed, todayKey } from '../core/rng';
 import { TIERS } from '../core/tiers';
 import { bgUrl, FINALE_NAME, hasArt, mascotUrl, preloadTheme, sprite, THEME_LABEL, THEME_NAMES, type Pose, type Theme } from '../game/art';
 import { CatcherSession } from '../game/catcher';
+import { BlocksGame } from '../arcade/blocks';
+import { BubblesGame } from '../arcade/bubbles';
+import { FusionGame } from '../arcade/fusion';
+import { Match3Game } from '../arcade/match3';
+import { PairsGame } from '../arcade/pairs';
+import { SnakeGame } from '../arcade/snake';
+import type { ArcadeGame, ArcadeHooks } from '../arcade/shell';
 import { levelMode, PlaySession, SKINS, type ModeConfig, type RunResult } from '../game/play';
 import { currentMissions, missionsReady, profile, refreshPeriods, resetProgress, save, totalStars, track, type DomeSkin, type PowerUp } from '../save';
 import { APP_VERSION, BUILD_ID, checkForUpdate, RELEASE_PAGE } from '../update';
@@ -101,8 +108,8 @@ function tabBar(active: string): HTMLElement {
   return h('nav.tabbar', {},
     tab('home', '🏠', 'Home', home),
     tab('levels', '🪐', 'Levels', levels),
+    tab('arcade', '🕹', 'Arcade', () => arcade()),
     tab('daily', '🏆', 'Daily', challenges, ready),
-    tab('atlas', '📖', 'Atlas', atlas),
     tab('shop', '🛍', 'Shop', shop));
 }
 
@@ -162,12 +169,14 @@ export function home() {
       today('🏆', 'Challenge', `${ch.drops} drops`, profile.daily.challengeDone, challenges),
       today('🌌', 'Constellation', profile.daily.best ? `Best ${profile.daily.best.toLocaleString('en-US')}` : 'New today', false, () => startRun(dailyMode())),
       today('🎯', 'Missions', `${missionsDone} / ${daily.length}`, missionsDone === daily.length && missionsReady() === 0, challenges)),
-    h('h2.section', {}, 'Games'),
+    h('h2.section', {}, 'Games', h('button.see-all', { onclick: go(() => arcade()) }, 'See all ›')),
     h('div.game-row', {},
       game(1, 'Meteor Rush', profile.bestRush ? `Best ${profile.bestRush.toLocaleString('en-US')}` : '90 seconds', () => startRun(MINIGAMES[0].mode!())),
       game(7, 'Tiny Dome', profile.bestTiny ? `Best ${profile.bestTiny.toLocaleString('en-US')}` : 'Narrow dome', () => startRun(MINIGAMES[1].mode!())),
       game(5, 'Zen Orbit', 'No game over', () => startRun(MINIGAMES[2].mode!())),
       game(3, 'Star Catcher', profile.bestCatcher ? `Best ${profile.bestCatcher}` : 'Tap to catch', startCatcher),
+      ...ARCADE.map(a => game(a.art, a.name, profile.arcade[a.id] ? `Best ${profile.arcade[a.id].toLocaleString('en-US')}` : a.tag, () => startArcade(a))),
+      game(10, 'Atlas', `${profile.atlas.filter(Boolean).length} / 12 found`, atlas),
       game(9, 'Theme', THEME_LABEL[profile.settings.theme], themePicker)),
     tabBar('home'),
   );
@@ -364,6 +373,58 @@ function levelIntro(lv: LevelDef) {
   document.body.append(modal);
 }
 
+// ----- Arcade -----
+
+type Category = 'All' | 'Merge' | 'Puzzle' | 'Action' | 'Relax';
+interface ArcadeDef { id: string; name: string; tag: string; desc: string; art: number; cat: Category; coinDiv: number; make: (hooks: ArcadeHooks) => ArcadeGame }
+
+const ARCADE: ArcadeDef[] = [
+  { id: 'fusion', name: 'Planet Fusion', tag: 'Swipe & merge', desc: 'Swipe the board. Matching pieces merge into bigger ones.', art: 6, cat: 'Merge', coinDiv: 40, make: hk => new FusionGame(hk) },
+  { id: 'blocks', name: 'Meteor Blocks', tag: 'Block puzzle', desc: 'Fit the shapes on the grid. Fill rows and columns to clear them.', art: 2, cat: 'Puzzle', coinDiv: 10, make: hk => new BlocksGame(hk) },
+  { id: 'bubbles', name: 'Bubble Nebula', tag: 'Aim & pop', desc: 'Shoot pieces and pop groups of three or more.', art: 4, cat: 'Action', coinDiv: 15, make: hk => new BubblesGame(hk) },
+  { id: 'snake', name: 'Comet Trail', tag: 'Steer & grow', desc: 'Steer the comet, collect pieces and grow your trail.', art: -1, cat: 'Action', coinDiv: 15, make: hk => new SnakeGame(hk) },
+  { id: 'match3', name: 'Gem Swap', tag: 'Match 3', desc: 'Swap neighbours to line up three or more. 30 moves.', art: 9, cat: 'Puzzle', coinDiv: 20, make: hk => new Match3Game(hk) },
+  { id: 'pairs', name: 'Star Pairs', tag: 'Memory', desc: 'Flip cards and find every pair before time runs out.', art: 8, cat: 'Relax', coinDiv: 25, make: hk => new PairsGame(hk) },
+];
+
+let arcadeCat: Category = 'All';
+
+function arcade(cat: Category = arcadeCat) {
+  arcadeCat = cat;
+  playMusic('home');
+  const entries: Array<{ name: string; desc: string; art: number; cat: Category; best: number; play: () => void }> = [
+    ...ARCADE.map(a => ({ name: a.name, desc: a.desc, art: a.art, cat: a.cat, best: profile.arcade[a.id] ?? 0, play: () => startArcade(a) })),
+    ...MINIGAMES.map(m => ({ name: m.name, desc: m.desc, art: GAME_ART[m.id] ?? 4, cat: (m.id === 'zen' ? 'Relax' : m.id === 'tiny' ? 'Merge' : 'Action') as Category, best: m.best(), play: () => (m.mode ? startRun(m.mode()) : startCatcher()) })),
+  ];
+  const chips = h('div.chips', {}, ...(['All', 'Merge', 'Puzzle', 'Action', 'Relax'] as Category[]).map(c =>
+    h('button.chip' + (c === cat ? '.on' : ''), { onclick: () => { sfx.click(); arcade(c); } }, c)));
+  const list = h('div.arcade-grid', {}, ...entries.filter(e => cat === 'All' || e.cat === cat).map(e =>
+    h('button.arcade-card.panel', { onclick: () => { unlockAudio(); sfx.click(); e.play(); } },
+      h('div.ac-art', {}, spriteImg(e.art, 30)),
+      h('div.ac-name', {}, e.name),
+      h('div.ac-desc', {}, e.desc),
+      h('div.ac-best', {}, e.best ? `Best ${e.best.toLocaleString('en-US')}` : 'New'))));
+  show(h('div.screen.list.tabbed', {}, topBar('Arcade', home), chips, list, tabBar('arcade')), home);
+}
+
+function startArcade(a: ArcadeDef) {
+  const game = a.make({
+    onEnd: score => {
+      const best = score > (profile.arcade[a.id] ?? 0);
+      if (best) profile.arcade[a.id] = score;
+      const coins = Math.floor(score / a.coinDiv);
+      profile.coins += coins;
+      profile.totals.runs++;
+      track({ type: 'minigame' });
+      save();
+      resultCard(a.name, score, best, coins, null, () => startArcade(a), () => arcade());
+    },
+    onQuit: () => arcade(),
+    onRestart: () => startArcade(a),
+  });
+  show(game.el, null, game);
+}
+
 // ----- Minigames -----
 
 function minigames() {
@@ -444,7 +505,7 @@ function atlas() {
   const nova = !!profile.atlas[11];
   grid.append(h('div.atlas-card.finale' + (nova ? '' : '.locked'), {}, h('span.card-icon', {}, nova ? '💥' : '🔒'), h('span', {}, nova ? FINALE_NAME[theme] : '???')));
   const found = profile.atlas.filter(Boolean).length;
-  show(h('div.screen.list.tabbed', {}, topBar('Atlas', home), h('p.hint', {}, `${found} / 12 discovered`), grid, tabBar('atlas')), home);
+  show(h('div.screen.list.tabbed', {}, topBar('Atlas', home), h('p.hint', {}, `${found} / 12 discovered`), grid, tabBar('')), home);
 }
 
 // ----- Shop -----

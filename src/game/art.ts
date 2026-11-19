@@ -488,3 +488,22 @@ export function drawFace(g: CanvasRenderingContext2D, x: number, y: number, r: n
 export function tierRadius(tier: number): number {
   return tier < 0 ? 18 : TIERS[tier].radius;
 }
+
+/** Draws a piece centred at (x, y) with radius r (CSS pixels) on a canvas scaled by dpr. */
+export function drawPiece(g: CanvasRenderingContext2D, tier: number, x: number, y: number, r: number, theme: Theme, dpr = 1) {
+  const s = sprite(tier, r * dpr, theme);
+  const w = s.width / dpr;
+  g.drawImage(s, x - w / 2, y - w / 2, w, w);
+}
+
+/** A piece as a DOM element, `r` CSS pixels in radius, sharp on high-density screens. */
+export function pieceEl(tier: number, r: number, theme: Theme, cls = ''): HTMLCanvasElement {
+  const s = sprite(tier, r * 2, theme);
+  const c = document.createElement('canvas');
+  c.width = s.width;
+  c.height = s.height;
+  c.getContext('2d')!.drawImage(s, 0, 0);
+  c.style.width = c.style.height = `${s.width / 2}px`;
+  if (cls) c.className = cls;
+  return c;
+}

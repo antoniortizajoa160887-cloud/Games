@@ -18,6 +18,7 @@ export interface Profile {
   bestRush: number;
   bestTiny: number;
   bestCatcher: number;
+  arcade: Record<string, number>; // best score per Arcade game
   levelStars: number[]; // index = level id - 1
   atlas: boolean[]; // tiers discovered, plus supernova at the end
   power: Record<PowerUp, number>;
@@ -40,6 +41,7 @@ function fresh(): Profile {
     bestRush: 0,
     bestTiny: 0,
     bestCatcher: 0,
+    arcade: {},
     levelStars: [],
     atlas: [],
     power: { pop: 2, swap: 2, boost: 1 },
@@ -60,7 +62,7 @@ function load(): Profile {
     if (!raw) return fresh();
     const p = JSON.parse(raw) as Partial<Profile>;
     const f = fresh();
-    return { ...f, ...p, power: { ...f.power, ...p.power }, settings: { ...f.settings, ...p.settings }, totals: { ...f.totals, ...p.totals } };
+    return { ...f, ...p, power: { ...f.power, ...p.power }, arcade: { ...p.arcade }, settings: { ...f.settings, ...p.settings }, totals: { ...f.totals, ...p.totals } };
   } catch {
     return fresh();
   }
