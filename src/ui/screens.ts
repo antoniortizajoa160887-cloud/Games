@@ -17,6 +17,8 @@ import { APP_VERSION, BUILD_ID, checkForUpdate, RELEASE_PAGE } from '../update';
 import { openExternal } from '../platform';
 import { lang } from '../i18n';
 import { clear, confetti, h, toast } from './dom';
+import { chestReady, checkTrophies, freeSpinReady, gameFinished, openChest, openWheel, spinsWaiting } from './rewards';
+import { CHEST_EVERY, TROPHIES } from '../core/rewards';
 import { closeGuide, firstTime, GUIDE_NAME, GUIDE_ORDER, markSeen, openGuide, type GuideId } from './howto';
 
 const app = () => document.getElementById('app')!;
@@ -29,7 +31,7 @@ function show(el: HTMLElement, back: (() => void) | null, session: Active | null
   active?.destroy();
   active = session;
   backTo = back;
-  document.querySelectorAll('.modal.overlay').forEach(m => m.remove());
+  document.querySelectorAll('.modal.overlay, .reward-back').forEach(m => m.remove());
   closeGuide();
   const root = app();
   clear(root);
@@ -41,6 +43,8 @@ function show(el: HTMLElement, back: (() => void) | null, session: Active | null
 /** Android back button. Returns false when on the home screen (the app then closes). */
 export function handleBack(): boolean {
   if (closeGuide()) return true;
+  const rb = document.querySelector('.reward-back');
+  if (rb) { rb.remove(); return true; }
   if (document.querySelector('.modal.overlay')) {
     document.querySelector('.modal.overlay')!.remove();
     return true;
@@ -174,6 +178,11 @@ export function home() {
       today('🏆', 'Challenge', `${ch.drops} drops`, profile.daily.challengeDone, challenges),
       today('🌌', 'Constellation', profile.daily.best ? `Best ${profile.daily.best.toLocaleString('en-US')}` : 'New today', false, () => startRun(dailyMode())),
       today('🎯', 'Missions', `${missionsDone} / ${daily.length}`, missionsDone === daily.length && missionsReady() === 0, challenges)),
+    h('h2.section', {}, 'Rewards'),
+    h('div.today-row', {},
+      today('🎡', 'Lucky Wheel', spinsWaiting() ? (freeSpinReady() ? 'Free spin!' : `${spinsWaiting()} spins`) : 'Win a level', false, () => openWheel(home)),
+      today('🎁', 'Star Chest', chestReady() ? 'Open it!' : `${profile.rewards.chest} / ${CHEST_EVERY} games`, false, () => (chestReady() ? openChest(home) : toast(`Finish ${CHEST_EVERY - profile.rewards.chest} more games to open it`))),
+      today('🏆', 'Trophies', `${profile.rewards.trophies.length} / ${TROPHIES.length}`, false, trophies)),
     h('h2.section', {}, 'Games', h('button.see-all', { onclick: go(() => arcade()) }, 'See all ›')),
     h('div.game-row', {},
       game(1, 'Meteor Rush', profile.bestRush ? `Best ${profile.bestRush.toLocaleString('en-US')}` : '90 seconds', () => startRun(MINIGAMES[0].mode!())),
@@ -258,8 +267,10 @@ function startCatcher() {
     if (r.best) profile.bestCatcher = r.score;
     const coins = Math.floor(r.score / 20);
     profile.coins += coins;
+    profile.totals.runs++;
     track({ type: 'minigame' });
     save();
+    gameFinished();
     resultCard('Star Catcher', r.score, r.best, coins, null, () => startCatcher(), minigames);
   }, minigames);
   show(s.el, null, s);
@@ -289,9 +300,11 @@ function results(r: RunResult) {
     profile.daily.challengeDone = true;
     coins += 100;
   }
+  if ((m.kind === 'level' || m.kind === 'challenge') && r.won) profile.rewards.spins++;
   profile.coins += coins;
   profile.totals.runs++;
   save();
+  gameFinished();
   const title = m.goal ? (r.won ? 'Goal complete!' : 'Out of luck…') : r.reason === 'time' ? "Time's up!" : 'Dome overflow!';
   const again = () => startRun(m.level && m.kind === 'level' ? levelMode(m.level) : m);
   const next = m.kind === 'level' && r.won && m.level && m.level.id < LEVELS.length ? () => levelIntro(LEVELS[m.level!.id]) : null;
@@ -316,6 +329,18 @@ function resultCard(title: string, score: number, best: boolean, coins: number, 
       h('button.btn', { onclick: () => { sfx.click(); back(); } }, '⌂ Menu'),
     ),
   );
+  const card = el.querySelector('.result-card')!;
+  const extras = h('div.result-extras', {});
+  const fillExtras = () => {
+    extras.replaceChildren(...[
+      spinsWaiting() ? h('button.reward-btn.wheel', { onclick: () => { sfx.click(); openWheel(fillExtras); } }, h('span', {}, '🎡'), h('span', {}, 'Spin the Lucky Wheel'), h('b', {}, String(spinsWaiting()))) : null,
+      chestReady() ? h('button.reward-btn.chest', { onclick: () => { sfx.click(); openChest(fillExtras); } }, h('span', {}, '🎁'), h('span', {}, 'Open the Star Chest')) : null,
+      !chestReady() ? h('div.chest-meter', {}, h('span', {}, '🎁'), h('div.cm-bar', {}, h('div.cm-fill', { style: `width:${(profile.rewards.chest / CHEST_EVERY) * 100}%` })), h('span.cm-n', {}, `${profile.rewards.chest}/${CHEST_EVERY}`)) : null,
+    ].filter((x): x is HTMLElement => !!x));
+  };
+  fillExtras();
+  card.insertBefore(extras, card.querySelector('.btn'));
+  setTimeout(checkTrophies, 900);
   if (coins > 0) setTimeout(() => sfx.coin(), 500);
   if (best || (stars ?? 0) >= 1) setTimeout(() => confetti(), 250);
   show(el, back);
@@ -436,6 +461,7 @@ function startArcade(a: ArcadeDef) {
       profile.totals.runs++;
       track({ type: 'minigame' });
       save();
+      gameFinished();
       resultCard(a.name, score, best, coins, null, () => startArcade(a), () => arcade());
     },
     onQuit: () => arcade(),
@@ -526,6 +552,24 @@ function atlas() {
   grid.append(h('div.atlas-card.finale' + (nova ? '' : '.locked'), {}, h('span.card-icon', {}, nova ? '💥' : '🔒'), h('span', {}, nova ? FINALE_NAME[theme] : '???')));
   const found = profile.atlas.filter(Boolean).length;
   show(h('div.screen.list.tabbed', {}, topBar('Atlas', home), h('p.hint', {}, `${found} / 12 discovered`), grid, tabBar('')), home);
+}
+
+// ----- Trophies -----
+
+function trophies() {
+  const got = profile.rewards.trophies;
+  const list = h('div.trophy-list', {}, ...TROPHIES.map(t => {
+    const [have, need] = t.progress(profile);
+    const done = got.includes(t.id);
+    return h('div.trophy' + (done ? '.done' : ''), {},
+      h('span.tr-icon', {}, t.icon),
+      h('div.tr-body', {},
+        h('div.tr-name', {}, t.name),
+        h('div.tr-text', {}, t.text),
+        done ? null : h('div.m-bar', {}, h('div.m-fill', { style: `width:${Math.min(100, (have / need) * 100)}%` }))),
+      h('span.tr-reward', {}, done ? '✓' : `${t.reward} ★`));
+  }));
+  show(h('div.screen.list', {}, topBar('Trophies', home), h('p.hint', {}, `${got.length} / ${TROPHIES.length} earned`), list), home);
 }
 
 // ----- Shop -----

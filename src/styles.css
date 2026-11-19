@@ -342,3 +342,41 @@ h2.section { font-size: 17px; margin: 18px 0 8px; color: var(--gold); }
 .ht-ok { margin: 10px auto 0; }
 @keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes ht-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ----- Rewards: Lucky Wheel, Star Chest, Trophies ----- */
+.reward-back { position: fixed; inset: 0; z-index: 55; background: rgba(8, 4, 24, 0.7); display: grid; place-items: center; animation: ht-fade 0.2s ease-out; }
+.reward-card { width: min(92vw, 380px); padding: 20px 18px; border-radius: 24px; background: linear-gradient(180deg, #3a2678, #24165a); border: 2px solid rgba(255, 207, 90, 0.55); text-align: center; animation: pop-in-flat 0.25s ease-out; }
+.reward-card h2 { margin: 0 0 6px; color: var(--gold); font-size: 26px; }
+.wheel-wrap { position: relative; width: min(74vw, 280px); aspect-ratio: 1; margin: 10px auto 6px; }
+.wheel-rotor { width: 100%; height: 100%; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.5)); }
+.wheel-svg { width: 100%; height: 100%; display: block; }
+.wheel-svg .wl { font: 900 17px Fredoka, Nunito, sans-serif; fill: #fff; paint-order: stroke; stroke: rgba(40, 16, 90, 0.55); stroke-width: 3px; }
+.wheel-svg .ws { font: 800 10px Nunito, sans-serif; fill: rgba(255, 255, 255, 0.9); }
+.wheel-svg .wc { font: 900 18px Fredoka, sans-serif; fill: #5a3000; }
+.wheel-pointer { position: absolute; left: 50%; top: -8px; transform: translateX(-50%); width: 0; height: 0; border-left: 14px solid transparent; border-right: 14px solid transparent; border-top: 26px solid #fff6d0; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6)); z-index: 2; }
+.wheel-result { min-height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.you-won { font-size: 13px; font-weight: 900; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; }
+.prize { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; margin: 3px; border-radius: 999px; background: rgba(255, 207, 90, 0.16); border: 1px solid rgba(255, 207, 90, 0.5); font-weight: 900; font-size: 17px; animation: pop-in-flat 0.3s ease-out; }
+.prize-icon { color: var(--gold); font-size: 20px; }
+.prize-list { min-height: 92px; display: flex; flex-wrap: wrap; justify-content: center; align-content: center; }
+.chest-box { font-size: 88px; line-height: 1.2; margin: 6px 0; filter: drop-shadow(0 0 22px rgba(255, 200, 80, 0.55)); }
+.chest-box.shake { animation: chest-shake 0.18s linear infinite; }
+.chest-box.burst { animation: pop-in-flat 0.4s ease-out; }
+@keyframes chest-shake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-8deg) scale(1.04); } 75% { transform: rotate(8deg) scale(1.04); } }
+.result-extras { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 6px; }
+.reward-btn { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 360px; margin: 0 auto; padding: 11px 14px; border-radius: 16px; font-weight: 900; font-size: 16px; text-align: left; border: 2px solid rgba(255, 207, 90, 0.7); background: linear-gradient(180deg, rgba(255, 207, 90, 0.25), rgba(255, 140, 60, 0.15)); animation: pulse-glow 2s ease-in-out infinite; }
+.reward-btn span:first-child { font-size: 24px; }
+.reward-btn span:nth-child(2) { flex: 1; }
+.reward-btn b { min-width: 26px; height: 26px; border-radius: 99px; background: var(--gold); color: #3a2200; display: grid; place-items: center; }
+.chest-meter { display: flex; align-items: center; gap: 10px; max-width: 360px; width: 100%; margin: 0 auto; font-weight: 800; font-size: 13px; }
+.cm-bar { flex: 1; height: 10px; border-radius: 99px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.cm-fill { height: 100%; background: linear-gradient(90deg, #ff8a5c, var(--gold)); border-radius: 99px; }
+.trophy-list { display: flex; flex-direction: column; gap: 8px; }
+.trophy { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 16px; background: var(--panel); border: 1px solid rgba(255, 255, 255, 0.1); }
+.trophy.done { border-color: rgba(255, 207, 90, 0.6); background: linear-gradient(90deg, rgba(255, 207, 90, 0.18), var(--panel)); }
+.tr-icon { font-size: 30px; width: 44px; text-align: center; flex: none; }
+.trophy:not(.done) .tr-icon { filter: grayscale(0.8); opacity: 0.6; }
+.tr-body { flex: 1; min-width: 0; }
+.tr-name { font-family: Fredoka, Nunito, sans-serif; font-weight: 700; font-size: 16px; }
+.tr-text { font-size: 13px; opacity: 0.8; margin-bottom: 4px; }
+.tr-reward { font-weight: 900; color: var(--gold); flex: none; }

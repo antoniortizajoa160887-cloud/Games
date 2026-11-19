@@ -33,6 +33,16 @@ export interface Profile {
   settings: Settings;
   seenGuide: boolean;
   seenHow: string[]; // games whose How to play has been shown
+  rewards: Rewards;
+}
+
+export interface Rewards {
+  spins: number; // Lucky Wheel spins waiting
+  freeSpinDay: string; // day the daily free spin was last used
+  spun: number;
+  chest: number; // games finished towards the next Star Chest
+  chestsOpened: number;
+  trophies: string[]; // awarded trophy ids
 }
 
 const KEY = 'stellar-drop-save-v1';
@@ -57,6 +67,7 @@ function fresh(): Profile {
     settings: { music: 0.6, sfx: 0.8, vibration: true, faces: true, theme: 'space', lang: 'auto', howTo: true },
     seenGuide: false,
     seenHow: [],
+    rewards: { spins: 0, freeSpinDay: '', spun: 0, chest: 0, chestsOpened: 0, trophies: [] },
   };
 }
 
@@ -66,7 +77,7 @@ function load(): Profile {
     if (!raw) return fresh();
     const p = JSON.parse(raw) as Partial<Profile>;
     const f = fresh();
-    return { ...f, ...p, power: { ...f.power, ...p.power }, arcade: { ...p.arcade }, settings: { ...f.settings, ...p.settings }, totals: { ...f.totals, ...p.totals } };
+    return { ...f, ...p, power: { ...f.power, ...p.power }, arcade: { ...p.arcade }, settings: { ...f.settings, ...p.settings }, totals: { ...f.totals, ...p.totals }, rewards: { ...f.rewards, ...p.rewards } };
   } catch {
     return fresh();
   }
